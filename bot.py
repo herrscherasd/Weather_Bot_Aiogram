@@ -6,14 +6,19 @@ from aiogram.types import ParseMode, ReplyKeyboardRemove
 
 from dotenv import load_dotenv
 import logging, requests
-import os
+import os, time
 
 from custom_state import WeatherState
+from database import CustomDB
 from buttons import button, location_markup
 
 OPENWEATHER_API_URL = 'http://api.openweathermap.org/data/2.5/weather'
 OPENWEATHER_GEOCODER_URL = 'http://api.openweathermap.org/geo/1.0/reverse'
 load_dotenv('.env')
+
+db = CustomDB()
+connect = db.connect
+db.connect_db()
 
 bot = Bot(os.environ.get('TOKEN'))
 dp = Dispatcher(bot, storage=MemoryStorage())
@@ -32,9 +37,15 @@ async def buttons(call):
 
 @dp.message_handler(commands=['start'])
 async def hello(message:types.Message):
+    cursor = connect.cursor()
+    cursor.execute(f"SELECT id FROM users WHERE id = {message.from_user.id};")
+    res = cursor.fetchall()
+    if res == []:
+        cursor.execute(f"INSERT INTO users VALUES ('{message.from_user.username}', '{message.from_user.first_name}', '{message.from_user.last_name}', {message.from_user.id}, '{time.ctime()}');")
     await message.answer(f'Здравствуйте {message.from_user.full_name}')
-    await message.answer(f'Этот бот подскажет вам погоду в том или ином городе')
-    await message.answer(f'Для начала работы нажмите на кнопку ниже', reply_markup=button)
+    await message.answer(f'Этот бот подскажет вам погоду рядом с вами')
+    await message.answer(f'Или же в любом городе который вы назовете')
+    await message.answer(f'Для начала работы нажмите на кнопку Меню')
 
 @dp.message_handler(commands=['weather'])
 async def weather(message:types.Message):
@@ -43,8 +54,12 @@ async def weather(message:types.Message):
 
 @dp.message_handler(state=WeatherState.weather)
 async def get_weather(message:types.Message, state:FSMContext):
+    if message.text == '/weather_near':
+        await state.finish()
+        await message.answer('Поиск по городам завершен. Попробуйте нажать снова.')
+    
     city = message.text
-
+    
     try:
         params = {
             'q': city,
@@ -74,11 +89,14 @@ async def get_weather(message:types.Message, state:FSMContext):
         weather_text = f"Погода в городе {city}: {temperature}°C, {description}."
         await message.reply(weather_text, parse_mode=ParseMode.MARKDOWN)
 
+
+
+
     except Exception as e:
         logging.exception(f"Ошибка при получении погоды: {e}")
         await message.reply("Произошла ошибка при получении погоды.")
     
-@dp.message_handler(commands='get_location')
+@dp.message_handler(commands='weather_near')
 async def user_location(message:types.Message):
     await message.answer('Нажмите на кнопку ниже и бот покажет покажет данные погоды рядом с вами', reply_markup=location_markup)
     await WeatherState.weather.set()
@@ -87,6 +105,10 @@ async def user_location(message:types.Message):
 async def get_own_weather(message: types.Message, state: FSMContext):
     longitude = message.location.longitude
     latitude = message.location.latitude
+
+    cursor = connect.cursor()
+    cursor.execute(f"INSERT INTO address VALUES ('{message.from_user.id}', '{message.location.longitude}', '{message.location.latitude}');")
+    connect.commit()
 
     geocoder_params = {
         'lon': longitude,
@@ -128,6 +150,8 @@ async def get_own_weather(message: types.Message, state: FSMContext):
         description = weather_data['weather'][0]['description']
         weather_text = f"Погода в городе {city}: {temperature}°C, {description}."
         await message.reply(weather_text, reply_markup=ReplyKeyboardRemove(), parse_mode=ParseMode.MARKDOWN)
+
+        await state.finish()
 
     except Exception as e:
         logging.exception(f"Ошибка при получении погоды: {e}")
