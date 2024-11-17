@@ -17,7 +17,8 @@ class CustomDB:
          
         cursor.execute("""CREATE TABLE IF NOT EXISTS address (
             id_user INTEGER,
-            address_longtitude INTEGER,
-            address_latitude INTEGER
+            address_longitude REAL,
+            address_latitude REAL,
+            timestamp DATETIME
             );""")
         self.connect.commit()

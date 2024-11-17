@@ -107,7 +107,7 @@ async def get_own_weather(message: types.Message, state: FSMContext):
     latitude = message.location.latitude
 
     cursor = connect.cursor()
-    cursor.execute(f"INSERT INTO address VALUES ('{message.from_user.id}', '{message.location.longitude}', '{message.location.latitude}');")
+    cursor.execute(f"INSERT INTO address VALUES ('{message.from_user.id}', '{message.location.longitude}', '{message.location.latitude}', '{message.date}');")
     connect.commit()
 
     geocoder_params = {
